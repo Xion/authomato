@@ -41,25 +41,20 @@ func main() {
 	log.Printf("Initializing Authomato v%s...", VERSION)
 
 	// parse the names of configuration files if provided
-	var provFile, consFile string
+	var provFile string = "./oauth_providers.json"
+	var consFile string = "./oauth_consumers.json"
 	if flag.NArg() > 0 {
 		if flag.NArg() > 1 {
 			consFile = flag.Arg(1)
-		} else {
-			consFile = "./oauth_consumers.json"
-			log.Printf("No OAuth consumers file specified -- using default: %s", consFile)
 		}
 		provFile = flag.Arg(0)
-	} else {
-		provFile = "./oauth_providers.json"
-		log.Printf("No OAuth providers file specified -- using default: %s", provFile)
 	}
 
 	// load OAuth providers and consumers
 	if providers, err := loadOAuthProviders(provFile); err != nil {
-		log.Printf("Error while reading OAuth providers (%+v)", err)
+		log.Printf("Error while reading OAuth providers from %s: %+v", provFile, err)
 	} else if consumers, err := loadOAuthConsumers(consFile, providers); err != nil {
-		log.Printf("Error while reading OAuth consumers (%+v)", err)
+		log.Printf("Error while reading OAuth consumers from %s: %+v", consFile, err)
 	} else {
 		oauthConsumers = consumers
 	}
