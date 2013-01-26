@@ -85,14 +85,14 @@ func startOAuthFlow(w http.ResponseWriter, r *http.Request) {
 
 	consumer := oauthConsumers[name]
 	if consumer == nil {
-		http.Error(w, fmt.Sprint("invalid app '%s'", name), http.StatusNotFound)
+		http.Error(w, "invalid app: "+name, http.StatusNotFound)
 		return
 	}
 
 	// generate ID for this session
 	var sid string
 	for sid == "" || oauthSessions[sid] != nil {
-		sid = RandomString(24, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+		sid = randomString(24, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	}
 
 	// talk to the OAuth provider and obtain request token
@@ -119,7 +119,39 @@ func startOAuthFlow(w http.ResponseWriter, r *http.Request) {
 }
 
 func callbackForOAuth(w http.ResponseWriter, r *http.Request) {
-	// ...
+	sid := r.URL.Query().Get("session")
+	if len(sid) == 0 {
+		http.Error(w, "'session' missing", http.StatusBadRequest)
+		return
+	}
+
+	session := oauthSessions[sid]
+	if session == nil {
+		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
+		return
+	}
+
+	code := r.URL.Query().Get("oauth_verifier")
+	if len(code) == 0 {
+		session.Error = true
+		http.Error(w, "no oauth_verifier found", http.StatusForbidden)
+		return
+	}
+
+	// TODO: eliminate need for this data juggling by using oauth lib types directly
+	c := oauth.NewConsumer(session.Consumer.Key, session.Consumer.Secret, oauth.ServiceProvider{
+		RequestTokenUrl:   session.Consumer.Provider.RequestTokenUrl,
+		AuthorizeTokenUrl: session.Consumer.Provider.AuthorizeUrl,
+		AccessTokenUrl:    session.Consumer.Provider.AccessTokenUrl,
+	})
+	accessToken, err := c.AuthorizeToken(session.RequestToken, code)
+	if err == nil {
+		session.Error = true
+		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
+		return
+	}
+
+	session.AccessToken = accessToken
 }
 
 // Configuration data
@@ -143,6 +175,8 @@ type OAuthSession struct {
 	StartedAt    time.Time
 	Consumer     *OAuthConsumer
 	RequestToken *oauth.RequestToken
+	AccessToken  *oauth.AccessToken
+	Error        bool // TODO: make it more fine grained
 }
 
 type OAuthProviders map[string]*OAuthProvider // indexed by name
@@ -189,7 +223,7 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 
 // Utility functions
 
-func RandomString(length int, chars string) string {
+func randomString(length int, chars string) string {
 	res := ""
 	for i := 0; i < length; i++ {
 		k := rand.Intn(len(chars))
