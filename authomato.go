@@ -96,13 +96,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		sid = randomString(24, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	}
 
-	// talk to the OAuth provider and obtain request token
-	c := oauth.NewConsumer(consumer.Key, consumer.Secret, oauth.ServiceProvider{
-		RequestTokenUrl:   consumer.Provider.RequestTokenUrl,
-		AuthorizeTokenUrl: consumer.Provider.AuthorizeUrl,
-		AccessTokenUrl:    consumer.Provider.AccessTokenUrl,
-	})
-	requestToken, url, err := c.GetRequestTokenAndUrl(
+	requestToken, url, err := consumer.GetRequestTokenAndUrl(
 		fmt.Sprint("%s://%s/oauth/callback?sid=%s", serverProtocol, serverDomain, sid))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -140,13 +134,7 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: eliminate need for this data juggling by using oauth lib types directly
-	c := oauth.NewConsumer(session.Consumer.Key, session.Consumer.Secret, oauth.ServiceProvider{
-		RequestTokenUrl:   session.Consumer.Provider.RequestTokenUrl,
-		AuthorizeTokenUrl: session.Consumer.Provider.AuthorizeUrl,
-		AccessTokenUrl:    session.Consumer.Provider.AccessTokenUrl,
-	})
-	accessToken, err := c.AuthorizeToken(session.RequestToken, code)
+	accessToken, err := session.Consumer.AuthorizeToken(session.RequestToken, code)
 	if err == nil {
 		session.Error = true
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
@@ -181,7 +169,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if wait {
-			_ = <-session.Channel
+			<-session.Channel
 		} else {
 			http.Error(w, "", http.StatusContinue)
 			return
@@ -191,33 +179,19 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 
 // Configuration data
 
-type OAuthProvider struct {
-	Name            string
-	RequestTokenUrl string
-	AuthorizeUrl    string
-	AccessTokenUrl  string
-}
-
-type OAuthConsumer struct {
-	Name     string
-	Provider *OAuthProvider
-	Key      string
-	Secret   string
-}
-
 type OAuthSession struct {
 	Id           string
 	StartedAt    time.Time
-	Consumer     *OAuthConsumer
+	Consumer     *oauth.Consumer
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
 	Error        bool // TODO: make it more fine grained
 	Channel      chan bool
 }
 
-type OAuthProviders map[string]*OAuthProvider // indexed by name
-type OAuthConsumers map[string]*OAuthConsumer // indexed by name
-type OAuthSessions map[string]*OAuthSession   // indexed by ID
+type OAuthProviders map[string]*oauth.ServiceProvider // indexed by name
+type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
+type OAuthSessions map[string]*OAuthSession           // indexed by ID
 
 func loadOAuthProviders(filename string) (OAuthProviders, error) {
 	b, err := ioutil.ReadFile(filename)
@@ -225,17 +199,9 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 		return nil, err
 	}
 
-	var providers []OAuthProvider
+	var providers OAuthProviders
 	err = json.Unmarshal(b, &providers)
-	if err != nil {
-		return nil, err
-	}
-
-	res := make(OAuthProviders)
-	for _, p := range providers {
-		res[p.Name] = &p
-	}
-	return res, nil
+	return providers, err
 }
 
 func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthConsumers, error) {
@@ -244,17 +210,30 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 		return nil, err
 	}
 
-	var consumers []OAuthConsumer
-	err = json.Unmarshal(b, &consumers)
+	// parse the JSON into generic map
+	var data map[string]interface{}
+	err = json.Unmarshal(b, &data)
 	if err != nil {
 		return nil, err
 	}
 
-	res := make(OAuthConsumers)
-	for _, c := range consumers {
-		res[c.Name] = &c
+	// resolve references to OAuth providers and construct result
+	var consumers OAuthConsumers
+	for k, v := range data {
+		c := v.(map[string]string)
+
+		provName := c["provider"]
+		if len(provName) == 0 {
+			return nil, fmt.Errorf("unspecified provider for consumer: %s", k)
+		}
+		provider := oauthProviders[provName]
+		if provider == nil {
+			return nil, fmt.Errorf("unknown provider: %s", provName)
+		}
+
+		consumers[k] = oauth.NewConsumer(c["key"], c["secret"], *provider)
 	}
-	return res, nil
+	return consumers, nil
 }
 
 // Utility functions
