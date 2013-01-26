@@ -25,12 +25,10 @@ const (
 )
 
 var (
-	serverProtocol string
-	serverDomain   string
-	serverPort     int
-
 	oauthConsumers OAuthConsumers
 	oauthSessions  OAuthSessions = make(OAuthSessions)
+
+	callbackPrefix string
 )
 
 func main() {
@@ -61,16 +59,15 @@ func main() {
 	}
 	log.Printf("Loaded %d OAuth consumer(s)", len(oauthConsumers))
 
-	// remember server details
+	// construct URL prefix for auth. callbacks coming back to the server
+	var proto string
 	if *https {
-		serverProtocol = "https"
+		proto = "https"
 	} else {
-		serverProtocol = "http"
+		proto = "http"
 	}
-	serverDomain = *domain
-	serverPort = *port
-	log.Printf("HTTP callbacks will use address %s://%s:%d/",
-		serverProtocol, serverPort, serverDomain)
+	callbackPrefix = fmt.Sprint("%s://%s:%d", proto, *domain, *port)
+	log.Printf("HTTP callbacks will use address %s/", callbackPrefix)
 
 	startServer(*port)
 }
@@ -125,8 +122,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestToken, url, err := consumer.GetRequestTokenAndUrl(
-		fmt.Sprintf("%s://%s:%d/oauth/callback?sid=%s",
-			serverProtocol, serverDomain, serverPort, sid))
+		fmt.Sprintf("%s/oauth/callback?sid=%s", callbackPrefix, sid))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
