@@ -27,6 +27,7 @@ const (
 var (
 	serverProtocol string
 	serverDomain   string
+	serverPort     int
 
 	oauthConsumers OAuthConsumers
 	oauthSessions  OAuthSessions = make(OAuthSessions)
@@ -67,7 +68,9 @@ func main() {
 		serverProtocol = "http"
 	}
 	serverDomain = *domain
-	log.Printf("HTTP callbacks will use address %s://%s/", serverProtocol, serverDomain)
+	serverPort = *port
+	log.Printf("HTTP callbacks will use address %s://%s:%d/",
+		serverProtocol, serverPort, serverDomain)
 
 	startServer(*port)
 }
@@ -122,7 +125,8 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestToken, url, err := consumer.GetRequestTokenAndUrl(
-		fmt.Sprint("%s://%s/oauth/callback?sid=%s", serverProtocol, serverDomain, sid))
+		fmt.Sprintf("%s://%s:%d/oauth/callback?sid=%s",
+			serverProtocol, serverDomain, serverPort, sid))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -136,7 +140,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		RequestToken: requestToken,
 		Channel:      make(chan bool, 1), // for completion signal when doing long poll
 	}
-	fmt.Printf("%s %s", sid, url)
+	fmt.Fprintf(w, "%s %s", sid, url)
 }
 
 func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
