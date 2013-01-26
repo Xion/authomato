@@ -67,8 +67,9 @@ func main() {
 
 // Setup HTTP handlers and start the authomato server
 func startServer(port int) {
-	http.HandleFunc("/oauth/start", startOAuthFlow)
-	http.HandleFunc("/oauth/callback", callbackForOAuth)
+	http.HandleFunc("/oauth/start", handleOAuthStart)
+	http.HandleFunc("/oauth/callback", handleOAuthCallback)
+	http.HandleFunc("/oauth/poll", handleOAuthPoll)
 
 	log.Printf("Listening on port %d...", port)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
@@ -76,7 +77,7 @@ func startServer(port int) {
 
 // Handlers
 
-func startOAuthFlow(w http.ResponseWriter, r *http.Request) {
+func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("app")
 	if len(name) == 0 {
 		http.Error(w, "'app' missing", http.StatusBadRequest)
@@ -102,7 +103,7 @@ func startOAuthFlow(w http.ResponseWriter, r *http.Request) {
 		AccessTokenUrl:    consumer.Provider.AccessTokenUrl,
 	})
 	requestToken, url, err := c.GetRequestTokenAndUrl(
-		fmt.Sprint("%s://%s/oauth/callback?session=%s", serverProtocol, serverDomain, sid))
+		fmt.Sprint("%s://%s/oauth/callback?sid=%s", serverProtocol, serverDomain, sid))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -114,14 +115,15 @@ func startOAuthFlow(w http.ResponseWriter, r *http.Request) {
 		StartedAt:    time.Now(),
 		Consumer:     consumer,
 		RequestToken: requestToken,
+		Channel:      make(chan bool, 1), // for completion signal when doing long poll
 	}
 	fmt.Printf("%s %s", sid, url)
 }
 
-func callbackForOAuth(w http.ResponseWriter, r *http.Request) {
-	sid := r.URL.Query().Get("session")
+func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	sid := r.URL.Query().Get("sid")
 	if len(sid) == 0 {
-		http.Error(w, "'session' missing", http.StatusBadRequest)
+		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
 
@@ -152,6 +154,39 @@ func callbackForOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.AccessToken = accessToken
+	session.Channel <- true
+}
+
+func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
+	sid := r.URL.Query().Get("sid")
+	if len(sid) == 0 {
+		http.Error(w, "'sid' missing", http.StatusBadRequest)
+		return
+	}
+
+	session := oauthSessions[sid]
+	if session == nil {
+		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
+		return
+	}
+
+	wait := r.URL.Query().Get("wait") == "true"
+	for {
+		if session.AccessToken != nil {
+			// success: we can return the access token
+			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
+		} else if session.Error {
+			fmt.Fprint(w, "error")
+			return
+		}
+
+		if wait {
+			_ = <-session.Channel
+		} else {
+			http.Error(w, "", http.StatusContinue)
+			return
+		}
+	}
 }
 
 // Configuration data
@@ -177,6 +212,7 @@ type OAuthSession struct {
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
 	Error        bool // TODO: make it more fine grained
+	Channel      chan bool
 }
 
 type OAuthProviders map[string]*OAuthProvider // indexed by name
