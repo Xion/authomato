@@ -13,9 +13,15 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
 	"time"
 
 	oauth "github.com/mrjones/oauth"
+)
+
+const (
+	VERSION = "0.0.1"
 )
 
 var (
@@ -32,6 +38,8 @@ func main() {
 	https := flag.Bool("https", false, "whether callback URLs should use HTTPS instead of HTTP")
 	flag.Parse()
 
+	log.Printf("Initializing Authomato v%s...", VERSION)
+
 	// parse the names of configuration files if provided
 	var provFile, consFile string
 	if flag.NArg() > 0 {
@@ -39,10 +47,12 @@ func main() {
 			consFile = flag.Arg(1)
 		} else {
 			consFile = "./oauth_consumers.json"
+			log.Printf("No OAuth consumers file specified -- using default: %s", consFile)
 		}
 		provFile = flag.Arg(0)
 	} else {
 		provFile = "./oauth_providers.json"
+		log.Printf("No OAuth providers file specified -- using default: %s", provFile)
 	}
 
 	// load OAuth providers and consumers
@@ -55,27 +65,48 @@ func main() {
 	}
 	log.Printf("Loaded %d OAuth consumer(s)", len(oauthConsumers))
 
-	// remember server details and start it
+	// remember server details
 	if *https {
 		serverProtocol = "https"
 	} else {
 		serverProtocol = "http"
 	}
 	serverDomain = *domain
+	log.Printf("HTTP callbacks will use address %s://%s/", serverProtocol, serverDomain)
+
 	startServer(*port)
 }
 
-// Setup HTTP handlers and start the authomato server
+// Server startup
+
 func startServer(port int) {
-	http.HandleFunc("/oauth/start", handleOAuthStart)
-	http.HandleFunc("/oauth/callback", handleOAuthCallback)
-	http.HandleFunc("/oauth/poll", handleOAuthPoll)
+	setupRequestHandlers()
+	setupSignalHandlers()
 
 	log.Printf("Listening on port %d...", port)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
-// Handlers
+func setupRequestHandlers() {
+	http.HandleFunc("/oauth/start", handleOAuthStart)
+	http.HandleFunc("/oauth/callback", handleOAuthCallback)
+	http.HandleFunc("/oauth/poll", handleOAuthPoll)
+}
+
+func setupSignalHandlers() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+
+	go func() {
+		for {
+			sig := <-ch
+			log.Printf("Caught %s signal, terminating...", sig)
+			os.Exit(0)
+		}
+	}()
+}
+
+// Request handlers
 
 func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("app")
