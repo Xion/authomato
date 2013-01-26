@@ -152,14 +152,14 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	code := r.URL.Query().Get("oauth_verifier")
 	if len(code) == 0 {
-		session.Error = true
+		session.Error = fmt.Errorf("oauth_verifier not found in callback request")
 		http.Error(w, "no oauth_verifier found", http.StatusForbidden)
 		return
 	}
 
 	accessToken, err := session.Consumer.AuthorizeToken(session.RequestToken, code)
 	if err == nil {
-		session.Error = true
+		session.Error = fmt.Errorf("cannot obtain access token: %+v", err)
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
 		return
 	}
@@ -183,10 +183,11 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	wait := r.URL.Query().Get("wait") == "true"
 	for {
 		if session.AccessToken != nil {
-			// success: we can return the access token
 			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
-		} else if session.Error {
-			fmt.Fprint(w, "error")
+			return
+		}
+		if session.Error != nil {
+			fmt.Fprint(w, "error: %+v", session.Error)
 			return
 		}
 
@@ -207,7 +208,7 @@ type OAuthSession struct {
 	Consumer     *oauth.Consumer
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
-	Error        bool // TODO: make it more fine grained
+	Error        error
 	Channel      chan bool
 }
 
