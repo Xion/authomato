@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 var (
@@ -37,9 +38,9 @@ func main() {
 
 	// load OAuth providers and consumers
 	if providers, err := loadOAuthProviders(provFile); err != nil {
-		log.Printf("Error while reading OAuth providers from %s: %+v", provFile, err)
+		log.Printf("Error while reading OAuth providers (%+v)", err)
 	} else if consumers, err := loadOAuthConsumers(consFile, providers); err != nil {
-		log.Printf("Error while reading OAuth consumers from %s: %+v", consFile, err)
+		log.Printf("Error while reading OAuth consumers (%+v)", err)
 	} else {
 		oauthConsumers = consumers
 	}
@@ -52,7 +53,7 @@ func main() {
 func startServer(port int) {
 	http.HandleFunc("/hello", helloHandler)
 
-	log.Printf("Listening on %d...", port)
+	log.Printf("Listening on port %d...", port)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
@@ -78,8 +79,16 @@ type OAuthConsumer struct {
 	Secret   string
 }
 
-type OAuthProviders map[string]OAuthProvider
-type OAuthConsumers map[string]OAuthConsumer
+type OAuthSession struct {
+	Id           string
+	StartedAt    time.Time
+	Consumer     *OAuthConsumer
+	RequestToken string
+}
+
+type OAuthProviders map[string]OAuthProvider // indexed by name
+type OAuthConsumers map[string]OAuthConsumer // indexed by name
+type OAuthSessions map[string]OAuthSession   // indexed by ID
 
 func loadOAuthProviders(filename string) (OAuthProviders, error) {
 	b, err := ioutil.ReadFile(filename)
