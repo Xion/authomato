@@ -208,7 +208,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Configuration data
+// Data structures
 
 type OAuthSession struct {
 	Id           string
@@ -230,8 +230,23 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 		return nil, err
 	}
 
+	// parse the JSON into generic map
+	var data map[string]interface{}
+	err = json.Unmarshal(b, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	// construct oauth.ServiceProvider structures
 	var providers OAuthProviders
-	err = json.Unmarshal(b, &providers)
+	for k, v := range data {
+		p := v.(map[string]string)
+		providers[k] = &oauth.ServiceProvider{
+			RequestTokenUrl:   p["requestTokenUrl"],
+			AuthorizeTokenUrl: p["authorizeUrl"],
+			AccessTokenUrl:    p["accessTokenUrl"],
+		}
+	}
 	return providers, err
 }
 
