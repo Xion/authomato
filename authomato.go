@@ -66,7 +66,7 @@ func main() {
 	} else {
 		proto = "http"
 	}
-	callbackPrefix = fmt.Sprint("%s://%s:%d", proto, *domain, *port)
+	callbackPrefix = fmt.Sprintf("%s://%s:%d", proto, *domain, *port)
 	log.Printf("HTTP callbacks will use address %s/", callbackPrefix)
 
 	startServer(*port)
@@ -187,7 +187,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if session.Error != nil {
-			fmt.Fprint(w, "error: %+v", session.Error)
+			fmt.Fprintf(w, "error: %+v", session.Error)
 			return
 		}
 
