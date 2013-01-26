@@ -114,7 +114,6 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "'app' missing", http.StatusBadRequest)
 		return
 	}
-
 	consumer := oauthConsumers[name]
 	if consumer == nil {
 		http.Error(w, "invalid app: "+name, http.StatusNotFound)
@@ -151,13 +150,11 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-
 	session := oauthSessions[sid]
 	if session == nil {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
 		return
 	}
-
 	code := r.URL.Query().Get("oauth_verifier")
 	if len(code) == 0 {
 		session.Error = true
@@ -182,7 +179,6 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-
 	session := oauthSessions[sid]
 	if session == nil {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
@@ -238,13 +234,13 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 	}
 
 	// construct oauth.ServiceProvider structures
-	var providers OAuthProviders
+	providers := make(OAuthProviders)
 	for k, v := range data {
-		p := v.(map[string]string)
+		p := v.(map[string]interface{})
 		providers[k] = &oauth.ServiceProvider{
-			RequestTokenUrl:   p["requestTokenUrl"],
-			AuthorizeTokenUrl: p["authorizeUrl"],
-			AccessTokenUrl:    p["accessTokenUrl"],
+			RequestTokenUrl:   p["requestTokenUrl"].(string),
+			AuthorizeTokenUrl: p["authorizeUrl"].(string),
+			AccessTokenUrl:    p["accessTokenUrl"].(string),
 		}
 	}
 	return providers, err
@@ -264,11 +260,11 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 	}
 
 	// resolve references to OAuth providers and construct result
-	var consumers OAuthConsumers
+	consumers := make(OAuthConsumers)
 	for k, v := range data {
-		c := v.(map[string]string)
+		c := v.(map[string]interface{})
 
-		provName := c["provider"]
+		provName := c["provider"].(string)
 		if len(provName) == 0 {
 			return nil, fmt.Errorf("unspecified provider for consumer: %s", k)
 		}
@@ -276,8 +272,12 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 		if provider == nil {
 			return nil, fmt.Errorf("unknown provider: %s", provName)
 		}
+		key, secret := c["key"].(string), c["secret"].(string)
+		if len(key) == 0 || len(secret) == 0 {
+			return nil, fmt.Errorf("unspecified key and/or secret for consumer: %s", k)
+		}
 
-		consumers[k] = oauth.NewConsumer(c["key"], c["secret"], *provider)
+		consumers[k] = oauth.NewConsumer(key, secret, *provider)
 	}
 	return consumers, nil
 }
