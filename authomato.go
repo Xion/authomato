@@ -75,11 +75,16 @@ func main() {
 // Server startup
 
 func startServer(port int) {
+	seedRandomGenerator()
 	setupRequestHandlers()
 	setupSignalHandlers()
 
 	log.Printf("Listening on port %d...", port)
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+}
+
+func seedRandomGenerator() {
+	rand.Seed(time.Now().UTC().UnixNano())
 }
 
 func setupRequestHandlers() {
