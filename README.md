@@ -86,3 +86,8 @@ Returns HTTP status 200 (OK) with access token in response body
 (token & secret delimited by whitespace).
 Returns HTTP status 100 (Continue) if `wait=true` wasn't provided and access token
 is not yet available.
+
+## Known issues
+
+* Stale session data is never purged, so they can accummulate for a significant memory load
+  after few million authentication sessions.
