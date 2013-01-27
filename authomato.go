@@ -1,6 +1,8 @@
 /*
  * Authomato :: authentication proxy
  * author: Karol Kuczmarski "Xion" <karol.kuczmarski@gmail.com>
+ *
+ * This program is free software, see LICENSE file for details.
  */
 
 package main
