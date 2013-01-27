@@ -67,7 +67,7 @@ func main() {
 		proto = "http"
 	}
 	callbackPrefix = fmt.Sprintf("%s://%s:%d", proto, *domain, *port)
-	log.Printf("HTTP callbacks will use address %s/", callbackPrefix)
+	log.Printf("HTTP callbacks will be routed to %s/", callbackPrefix)
 
 	startServer(*port)
 }
@@ -120,7 +120,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// generate ID for this session
+	// generate unique ID for this session
 	var sid string
 	for sid == "" || oauthSessions[sid] != nil {
 		sid = randomString(24, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -163,13 +163,14 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	accessToken, err := session.Consumer.AuthorizeToken(session.RequestToken, code)
-	if err == nil {
+	if err != nil {
 		session.Error = fmt.Errorf("cannot obtain access token: %+v", err)
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
 		return
 	}
 
 	session.AccessToken = accessToken
+	session.Error = nil
 	session.Channel <- true
 }
 
