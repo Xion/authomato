@@ -54,6 +54,8 @@ Finally, run the server:
     2013/01/26 21:12:22 HTTP callbacks will be routed to http://127.0.0.1:8080/
     2013/01/26 21:12:22 Listening on port 8080...
 
+For additional options, invoke the program with `-help` flag.
+
 ## API
 
 All requests use simple HTTP query parameters and return plain text
@@ -86,6 +88,26 @@ Returns HTTP status 200 (OK) with access token in response body
 (token & secret delimited by whitespace).
 Returns HTTP status 100 (Continue) if `wait=true` wasn't provided and access token
 is not yet available.
+
+## Client example
+
+This is a minimalistic example of client application for Authomato written as shell script:
+
+    #!/bin/sh
+
+    app=$1
+    server=$([ -n "$2" ] && echo "$2" || echo "127.0.0.1:8080")
+
+    start_response=($(curl -s 'http://'"$server"'/oauth/start?app='"$app"))
+    sid=${start_response[0]}
+    url=${start_response[1]}
+
+    echo "Please visit the following URL to complete the authentication process:"
+    echo $url
+
+    poll_response=($(curl -s 'http://'"$server"'/oauth/poll?sid='"$sid"'&wait=true'))
+    echo "Obtained access token: token=${poll_response[0]} secret=${poll_response[1]}"
+
 
 ## Known issues
 
