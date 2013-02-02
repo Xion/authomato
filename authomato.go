@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -285,10 +286,9 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 // Utility functions
 
 func randomString(length int, chars string) string {
-	res := ""
+	b := &bytes.Buffer{}
 	for i := 0; i < length; i++ {
-		k := rand.Intn(len(chars))
-		res += string(chars[k])
+		b.WriteByte(chars[rand.Intn(len(chars))])
 	}
-	return res
+	return b.String()
 }
