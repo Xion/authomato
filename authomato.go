@@ -120,12 +120,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// generate unique ID for this session
-	var sid string
-	for sid == "" || oauthSessions[sid] != nil {
-		sid = randomString(24, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	}
-
+	sid := generateSessionId()
 	requestToken, url, err := consumer.GetRequestTokenAndUrl(
 		fmt.Sprintf("%s/oauth/callback?sid=%s", callbackPrefix, sid))
 	if err != nil {
@@ -281,6 +276,20 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 		consumers[k] = oauth.NewConsumer(key, secret, *provider)
 	}
 	return consumers, nil
+}
+
+func generateSessionId() string {
+	const LENGTH = 24
+	const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+	for {
+		sid := randomString(LENGTH, CHARS)
+		if _, ok := oauthSessions[sid]; !ok {
+			oauthSessions[sid] = nil // reserve immediately to minimize hazards
+			return sid
+		}
+	}
+	return "" // unreachable
 }
 
 // Utility functions
