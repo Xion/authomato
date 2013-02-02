@@ -22,8 +22,12 @@ import (
 	oauth "github.com/mrjones/oauth"
 )
 
-const (
-	VERSION = "0.0.1"
+const VERSION = "0.0.1"
+
+var (
+	port   = flag.Int("port", 8080, "specify port that the server will listen on")
+	domain = flag.String("domain", "127.0.0.1", "specify the server domain for callback URLs")
+	https  = flag.Bool("https", false, "whether callback URLs should use HTTPS instead of HTTP")
 )
 
 var (
@@ -34,9 +38,6 @@ var (
 )
 
 func main() {
-	port := flag.Int("port", 8080, "specify port that the server will listen on")
-	domain := flag.String("domain", "127.0.0.1", "specify the server domain for callback URLs")
-	https := flag.Bool("https", false, "whether callback URLs should use HTTPS instead of HTTP")
 	flag.Parse()
 
 	log.Printf("Initializing Authomato v%s...", VERSION)
@@ -45,28 +46,26 @@ func main() {
 	var provFile string = "./oauth_providers.json"
 	var consFile string = "./oauth_consumers.json"
 	if flag.NArg() > 0 {
-		if flag.NArg() > 1 {
-			consFile = flag.Arg(1)
-		}
 		provFile = flag.Arg(0)
+	}
+	if flag.NArg() > 1 {
+		consFile = flag.Arg(1)
 	}
 
 	// load OAuth providers and consumers
 	if providers, err := loadOAuthProviders(provFile); err != nil {
-		log.Printf("Error while reading OAuth providers from %s: %+v", provFile, err)
+		log.Fatalf("Error while reading OAuth providers from %s: %v", provFile, err)
 	} else if consumers, err := loadOAuthConsumers(consFile, providers); err != nil {
-		log.Printf("Error while reading OAuth consumers from %s: %+v", consFile, err)
+		log.Fatalf("Error while reading OAuth consumers from %s: %v", consFile, err)
 	} else {
 		oauthConsumers = consumers
 	}
 	log.Printf("Loaded %d OAuth consumer(s)", len(oauthConsumers))
 
 	// construct URL prefix for auth. callbacks coming back to the server
-	var proto string
+	proto := "http"
 	if *https {
 		proto = "https"
-	} else {
-		proto = "http"
 	}
 	callbackPrefix = fmt.Sprintf("%s://%s:%d", proto, *domain, *port)
 	log.Printf("HTTP callbacks will be routed to %s/", callbackPrefix)
@@ -100,24 +99,22 @@ func setupSignalHandlers() {
 	signal.Notify(ch, os.Interrupt)
 
 	go func() {
-		for {
-			sig := <-ch
-			log.Printf("Caught %s signal, terminating...", sig)
-			os.Exit(0)
-		}
+		sig := <-ch
+		log.Printf("Caught %s signal, terminating...", sig)
+		os.Exit(0)
 	}()
 }
 
 // Request handlers
 
 func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Query().Get("app")
+	name := r.FormValue("app")
 	if len(name) == 0 {
 		http.Error(w, "'app' missing", http.StatusBadRequest)
 		return
 	}
-	consumer := oauthConsumers[name]
-	if consumer == nil {
+	consumer, ok := oauthConsumers[name]
+	if !ok {
 		http.Error(w, "invalid app: "+name, http.StatusNotFound)
 		return
 	}
@@ -147,17 +144,17 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	sid := r.URL.Query().Get("sid")
+	sid := r.FormValue("sid")
 	if len(sid) == 0 {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-	session := oauthSessions[sid]
-	if session == nil {
+	session, ok := oauthSessions[sid]
+	if !ok {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
 		return
 	}
-	code := r.URL.Query().Get("oauth_verifier")
+	code := r.FormValue("oauth_verifier")
 	if len(code) == 0 {
 		session.Error = fmt.Errorf("oauth_verifier not found in callback request")
 		http.Error(w, "no oauth_verifier found", http.StatusForbidden)
@@ -166,7 +163,7 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := session.Consumer.AuthorizeToken(session.RequestToken, code)
 	if err != nil {
-		session.Error = fmt.Errorf("cannot obtain access token: %+v", err)
+		session.Error = fmt.Errorf("cannot obtain access token: %v", err)
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
 		return
 	}
@@ -177,34 +174,33 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
-	sid := r.URL.Query().Get("sid")
+	sid := r.FormValue("sid")
 	if len(sid) == 0 {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-	session := oauthSessions[sid]
-	if session == nil {
+	session, ok := oauthSessions[sid]
+	if !ok {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
 		return
 	}
 
-	wait := r.URL.Query().Get("wait") == "true"
+	wait := r.FormValue("wait") == "true"
 	for {
 		if session.AccessToken != nil {
 			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
 			return
 		}
 		if session.Error != nil {
-			fmt.Fprintf(w, "error: %+v", session.Error)
+			fmt.Fprintf(w, "error: %v", session.Error)
 			return
 		}
 
-		if wait {
-			<-session.Channel
-		} else {
+		if !wait {
 			http.Error(w, "", http.StatusContinue)
 			return
 		}
+		<-session.Channel
 	}
 }
 
@@ -247,7 +243,7 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 			AccessTokenUrl:    p["accessTokenUrl"].(string),
 		}
 	}
-	return providers, err
+	return providers, nil
 }
 
 func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthConsumers, error) {
