@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	oauth "github.com/mrjones/oauth"
@@ -33,7 +34,7 @@ var (
 
 var (
 	oauthConsumers OAuthConsumers
-	oauthSessions  OAuthSessions = make(OAuthSessions)
+	oauthSessions  OAuthSessions = makeOAuthSessions()
 
 	callbackPrefix string
 )
@@ -120,7 +121,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sid := generateSessionId()
+	sid := oauthSessions.AllocateId()
 	requestToken, url, err := consumer.GetRequestTokenAndUrl(
 		fmt.Sprintf("%s/oauth/callback?sid=%s", callbackPrefix, sid))
 	if err != nil {
@@ -129,13 +130,13 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// save the session info and return ID + URL for the user
-	oauthSessions[sid] = &OAuthSession{
+	oauthSessions.Put(sid, &OAuthSession{
 		Id:           sid,
 		StartedAt:    time.Now(),
 		Consumer:     consumer,
 		RequestToken: requestToken,
 		Channel:      make(chan bool, 1), // for completion signal when doing long poll
-	}
+	})
 	fmt.Fprintf(w, "%s %s", sid, url)
 }
 
@@ -145,7 +146,7 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-	session, ok := oauthSessions[sid]
+	session, ok := oauthSessions.Get(sid)
 	if !ok {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
 		return
@@ -175,7 +176,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "'sid' missing", http.StatusBadRequest)
 		return
 	}
-	session, ok := oauthSessions[sid]
+	session, ok := oauthSessions.Get(sid)
 	if !ok {
 		http.Error(w, "invalid session ID: "+sid, http.StatusNotFound)
 		return
@@ -200,21 +201,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Data structures
-
-type OAuthSession struct {
-	Id           string
-	StartedAt    time.Time
-	Consumer     *oauth.Consumer
-	RequestToken *oauth.RequestToken
-	AccessToken  *oauth.AccessToken
-	Error        error
-	Channel      chan bool
-}
-
-type OAuthProviders map[string]*oauth.ServiceProvider // indexed by name
-type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
-type OAuthSessions map[string]*OAuthSession           // indexed by ID
+// Configuration loaders
 
 func loadOAuthProviders(filename string) (OAuthProviders, error) {
 	b, err := ioutil.ReadFile(filename)
@@ -278,14 +265,61 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 	return consumers, nil
 }
 
-func generateSessionId() string {
+// Data structures
+
+type OAuthProviders map[string]*oauth.ServiceProvider // indexed by name
+type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
+
+type OAuthSession struct {
+	Id           string
+	StartedAt    time.Time
+	Consumer     *oauth.Consumer
+	RequestToken *oauth.RequestToken
+	AccessToken  *oauth.AccessToken
+	Error        error
+	Channel      chan bool
+}
+
+type OAuthSessions struct {
+	sync.RWMutex
+	m map[string]*OAuthSession // indexed by ID
+}
+
+func makeOAuthSessions() OAuthSessions {
+	return OAuthSessions{m: make(map[string]*OAuthSession)}
+}
+
+func (s OAuthSessions) Get(k string) (*OAuthSession, bool) {
+	s.RLock()
+	defer s.RUnlock()
+	v, ok := s.m[k]
+	return v, ok
+}
+
+func (s OAuthSessions) Put(k string, v *OAuthSession) {
+	s.Lock()
+	defer s.Unlock()
+	s.m[k] = v
+}
+
+func (s OAuthSessions) Add(k string, v *OAuthSession) bool {
+	s.Lock()
+	defer s.Unlock()
+
+	if _, ok := s.m[k]; ok {
+		return false // already exists, can't add new
+	}
+	s.m[k] = v
+	return true
+}
+
+func (s OAuthSessions) AllocateId() string {
 	const length = 24
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 	for {
 		sid := randomString(length, chars)
-		if _, ok := oauthSessions[sid]; !ok {
-			oauthSessions[sid] = nil // reserve immediately to minimize hazards
+		if s.Add(sid, nil) {
 			return sid
 		}
 	}
