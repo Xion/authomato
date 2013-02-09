@@ -23,7 +23,7 @@ import (
 	oauth "github.com/mrjones/oauth"
 )
 
-const VERSION = "0.0.1"
+const version = "0.0.1"
 
 var (
 	port   = flag.Int("port", 8080, "specify port that the server will listen on")
@@ -41,7 +41,7 @@ var (
 func main() {
 	flag.Parse()
 
-	log.Printf("Initializing Authomato v%s...", VERSION)
+	log.Printf("Initializing Authomato v%s...", version)
 
 	// parse the names of configuration files if provided
 	var provFile string = "./oauth_providers.json"
@@ -279,11 +279,11 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 }
 
 func generateSessionId() string {
-	const LENGTH = 24
-	const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const length = 24
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 	for {
-		sid := randomString(LENGTH, CHARS)
+		sid := randomString(length, chars)
 		if _, ok := oauthSessions[sid]; !ok {
 			oauthSessions[sid] = nil // reserve immediately to minimize hazards
 			return sid
