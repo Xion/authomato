@@ -15,11 +15,13 @@ flow simpler and more convenient to the user. With Authomato,
 the process of authorizing an app is very simple:
 
 1. Issue a request to Authomato server with your app (consumer) name.
+
    You will get a _session ID_ (`sid`) and URL that the user should visit.
 2. Display the URL you got or just open the browser. This will allow the user
    to authorize your application.
-3. Wait on long poll request until you get the access token. You can also hit
-   the server periodically until the authentication flow is complete.
+3. Wait on long poll request until you get the access token.
+
+   You can also hit the server periodically until the authentication flow is complete.
 
 Once you have the access token, you can call the provider's API using
 any of the various OAuth client libraries available for almost any language.
@@ -82,10 +84,11 @@ Check the state of OAuth flow, retrieving the access token if available.
 Query parameters:
 
 * `sid`: session ID received when starting the flow
-* (_optional_) `wait`: `true` if the request should block until authorization is finished
+* (optional) `wait`: `true` if the request should block until authorization is finished
 
 Returns HTTP status 200 (OK) with access token in response body
 (token & secret delimited by whitespace).
+
 Returns HTTP status 100 (Continue) if `wait=true` wasn't provided and access token
 is not yet available.
 
