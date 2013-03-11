@@ -55,13 +55,15 @@ func main() {
 	}
 
 	// load OAuth providers and consumers
-	if providers, err := loadOAuthProviders(provFile); err != nil {
+	providers, err := loadOAuthProviders(provFile)
+	if err != nil {
 		log.Fatalf("Error while reading OAuth providers from %s: %v", provFile, err)
-	} else if consumers, err := loadOAuthConsumers(consFile, providers); err != nil {
-		log.Fatalf("Error while reading OAuth consumers from %s: %v", consFile, err)
-	} else {
-		oauthConsumers = consumers
 	}
+	consumers, err := loadOAuthConsumers(consFile, providers)
+	if err != nil {
+		log.Fatalf("Error while reading OAuth consumers from %s: %v", consFile, err)
+	}
+	oauthConsumers = consumers
 	log.Printf("Loaded %d OAuth consumer(s)", len(oauthConsumers))
 
 	// construct URL prefix for auth. callbacks coming back to the server
@@ -112,7 +114,7 @@ func setupSignalHandlers() {
 func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("app")
 	if len(name) == 0 {
-		http.Error(w, "'app' missing", http.StatusBadRequest)
+		http.Error(w, "'app' paramater missing", http.StatusBadRequest)
 		return
 	}
 	consumer, ok := oauthConsumers[name]

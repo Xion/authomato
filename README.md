@@ -32,7 +32,7 @@ First, define the OAuth providers you're using in _oauth\_providers.json_:
 
     {
         "twitter": {
-            requestTokenUrl": "http://twitter.com/oauth/request_token",
+            "requestTokenUrl": "http://twitter.com/oauth/request_token",
             "authorizeUrl": "http://twitter.com/oauth/authenticate",
             "accessTokenUrl": "http://twitter.com/oauth/access_token"
         }
