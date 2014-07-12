@@ -66,7 +66,8 @@ func main() {
 		log.Fatalf("Error while reading OAuth consumers from %s: %v", consFile, err)
 	}
 	oauthConsumers = consumers
-	log.Printf("Loaded %d OAuth consumer(s)", len(oauthConsumers))
+	log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
+        len(providers), len(consumers))
 
 	// construct URL prefix for auth. callbacks coming back to the server
 	proto := "http"
