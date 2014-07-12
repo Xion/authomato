@@ -112,7 +112,24 @@ This is a minimalistic example of client application for Authomato written as sh
     echo "Obtained access token: token=${poll_response[0]} secret=${poll_response[1]}"
 
 
-## Known issues
+## Project status
+
+This is mostly a toy project to try out Go as a language.
+
+### Known issues
 
 * Stale session data is never purged, so they can accummulate for a significant memory load
   after few million authentication sessions.
+
+### Nice-to-have features
+
+* Recognize HTTP Accept: header and provide different types of output, like JSON.
+* Throttle non-blocking polls through HTTP Retry-After: and Refresh: headers in response to /oauth/poll
+* Allow to specify wait time in /oauth/poll
+* Fill out Server: header in all responses
+* Watch configuration files (OAuth providers & consumers) for changes and reload them on the fly
+
+### Code quality tasks
+
+* Split into several modules
+* Add tests
