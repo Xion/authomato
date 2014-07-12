@@ -84,13 +84,14 @@ Check the state of OAuth flow, retrieving the access token if available.
 Query parameters:
 
 * `sid`: session ID received when starting the flow
-* (optional) `wait`: `true` if the request should block until authorization is finished
+* (optional) `wait`: wait time in seconds (default 0),
+  or`true` if the request should block until authorization is finished
 
 Returns HTTP status 200 (OK) with access token in response body
 (token & secret delimited by whitespace).
 
-Returns HTTP status 100 (Continue) if `wait=true` wasn't provided and access token
-is not yet available.
+Returns HTTP status 100 (Continue) after wait time (if any) was exceeded
+before access token became available.
 
 ## Client example
 
@@ -125,7 +126,6 @@ This is mostly a toy project to try out Go as a language.
 
 * Recognize HTTP Accept: header and provide different types of output, like JSON.
 * Throttle non-blocking polls through HTTP Retry-After: and Refresh: headers in response to /oauth/poll
-* Allow to specify wait time in /oauth/poll
 * Fill out Server: header in all responses
 * Watch configuration files (OAuth providers & consumers) for changes and reload them on the fly
 

@@ -18,8 +18,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
-	"time"
+    "strconv"
+    "sync"
+    "time"
 
 	oauth "github.com/mrjones/oauth"
 )
@@ -184,7 +185,22 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wait := r.FormValue("wait") == "true"
+    // determine how we are to wait in this particular poll request
+    var waitTime int64
+	wait := r.FormValue("wait")
+    if len(wait) == 0 {
+        waitTime = 0
+    } else if wait == "true" {
+        waitTime = int64(^uint64(0) >> 1) // MaxInt64
+    } else {
+        waitTime, err := strconv.Atoi(wait)
+        if err != nil || waitTime < 0 {
+            http.Error(w, "invalid wait value: "+wait, http.StatusBadRequest)
+            return
+        }
+    }
+
+    start := time.Now().Unix()
 	for {
 		if session.AccessToken != nil {
 			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
@@ -195,7 +211,9 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if !wait {
+        // if the wait time was exceeded, end the request
+        now := time.Now().Unix()
+        if now - start >= waitTime {
 			http.Error(w, "", http.StatusContinue)
 			return
 		}
