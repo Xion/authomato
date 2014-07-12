@@ -25,6 +25,7 @@ import (
 	oauth "github.com/mrjones/oauth"
 )
 
+const serverName = "authomato"
 const version = "0.0.2"
 
 var (
@@ -94,9 +95,17 @@ func seedRandomGenerator() {
 }
 
 func setupRequestHandlers() {
-	http.HandleFunc("/oauth/start", handleOAuthStart)
-	http.HandleFunc("/oauth/callback", handleOAuthCallback)
-	http.HandleFunc("/oauth/poll", handleOAuthPoll)
+    type RequestHandler func(http.ResponseWriter, *http.Request)
+    withResponseHeaders := func(h RequestHandler) RequestHandler {
+        return func(w http.ResponseWriter, r *http.Request) {
+            w.Header().Set("Server", fmt.Sprintf("%s v%s", serverName, version))
+            h(w, r)
+        }
+    }
+
+	http.HandleFunc("/oauth/start", withResponseHeaders(handleOAuthStart))
+	http.HandleFunc("/oauth/callback", withResponseHeaders(handleOAuthCallback))
+	http.HandleFunc("/oauth/poll", withResponseHeaders(handleOAuthPoll))
 }
 
 func setupSignalHandlers() {
