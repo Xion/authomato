@@ -19,76 +19,78 @@ import (
 	"os"
 	"os/signal"
     "strconv"
+    "strings"
     "sync"
     "time"
 
 	oauth "github.com/mrjones/oauth"
 )
 
-const serverName = "authomato"
-const version = "0.0.2"
-
-var (
-	port   = flag.Int("port", 8080, "specify port that the server will listen on")
-	domain = flag.String("domain", "127.0.0.1", "specify the server domain for callback URLs")
-	https  = flag.Bool("https", false, "whether callback URLs should use HTTPS instead of HTTP")
+const (
+    serverName = "authomato"
+    version = "0.0.3"
 )
 
 var (
-	oauthConsumers OAuthConsumers
-	oauthSessions  OAuthSessions = makeOAuthSessions()
+    address       = flag.String("l", "127.0.0.1:8080", "specify network address the server will listen on")
+    providersFile = flag.String("p", "", "JSON file defining OAuth providers")
+    consumersFile = flag.String("c", "", "JSON file defining OAuth consumers")
+)
 
-	callbackPrefix string
+var (
+	serverUrl string
+
+    oauthConsumers OAuthConsumers
+    oauthSessions  OAuthSessions = makeOAuthSessions()
 )
 
 func main() {
+    log.Printf("Initializing Authomato v%s...", version)
 	flag.Parse()
 
-	log.Printf("Initializing Authomato v%s...", version)
+    // server's URL determines which address it listens on
+    serverUrl = fmt.Sprintf("http://%s", *address)
+    if flag.NArg() > 0 {
+        serverUrl = flag.Arg(0)
+    }
+    serverUrl = strings.TrimSuffix(serverUrl, "/")
+    log.Printf("HTTP callbacks will be routed to %s/", serverUrl)
 
-	// parse the names of configuration files if provided
-	var provFile string = "./oauth_providers.json"
-	var consFile string = "./oauth_consumers.json"
-	if flag.NArg() > 0 {
-		provFile = flag.Arg(0)
-	}
-	if flag.NArg() > 1 {
-		consFile = flag.Arg(1)
-	}
+    // use default paths to configuration files if none was provided
+    if len(*providersFile) == 0 {
+        *providersFile = "./oauth_providers.json"
+        log.Printf("No OAuth providers file specified, using default: %s", *providersFile)
+    }
+    if len(*consumersFile) == 0 {
+        *consumersFile = "./oauth_consumers.json"
+        log.Printf("No OAuth consumers file specified, using default: %s", *consumersFile)
+    }
 
 	// load OAuth providers and consumers
-	providers, err := loadOAuthProviders(provFile)
+	providers, err := loadOAuthProviders(*providersFile)
 	if err != nil {
-		log.Fatalf("Error while reading OAuth providers from %s: %v", provFile, err)
+		log.Fatalf("Error while reading OAuth providers from %s: %v", *providersFile, err)
 	}
-	consumers, err := loadOAuthConsumers(consFile, providers)
+	consumers, err := loadOAuthConsumers(*consumersFile, providers)
 	if err != nil {
-		log.Fatalf("Error while reading OAuth consumers from %s: %v", consFile, err)
+		log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
 	}
 	oauthConsumers = consumers
 	log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
         len(providers), len(consumers))
 
-	// construct URL prefix for auth. callbacks coming back to the server
-	proto := "http"
-	if *https {
-		proto = "https"
-	}
-	callbackPrefix = fmt.Sprintf("%s://%s:%d", proto, *domain, *port)
-	log.Printf("HTTP callbacks will be routed to %s/", callbackPrefix)
-
-	startServer(*port)
+	startServer(*address)
 }
 
 // Server startup
 
-func startServer(port int) {
+func startServer(address string) {
 	seedRandomGenerator()
 	setupRequestHandlers()
 	setupSignalHandlers()
 
-	log.Printf("Listening on port %d...", port)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	log.Printf("Listening on address %s...", address)
+	http.ListenAndServe(address, nil)
 }
 
 func seedRandomGenerator() {
@@ -136,7 +138,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 
 	sid := oauthSessions.AllocateId()
 	requestToken, url, err := consumer.GetRequestTokenAndUrl(
-		fmt.Sprintf("%s/oauth/callback?sid=%s", callbackPrefix, sid))
+		fmt.Sprintf("%s/oauth/callback?sid=%s", serverUrl, sid))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
