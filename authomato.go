@@ -76,8 +76,12 @@ func main() {
 		log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
 	}
 	oauthConsumers = consumers
-	log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
-        len(providers), len(consumers))
+    if len(consumers) > 0 {
+        log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
+            len(providers), len(consumers))
+    } else {
+        log.Fatalf("No OAuth consumers loaded -- quitting...")
+    }
 
 	startServer(*address)
 }
