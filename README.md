@@ -117,11 +117,6 @@ This is a minimalistic example of client application for Authomato written as sh
 
 This is mostly a toy project to try out Go as a language.
 
-### Known issues
-
-* Stale session data is never purged, so they can accummulate for a significant memory load
-  after few million authentication sessions.
-
 ### Nice-to-have features
 
 * Recognize HTTP Accept: header and provide different types of output, like JSON.

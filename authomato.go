@@ -103,16 +103,22 @@ func seedRandomGenerator() {
 
 func setupRequestHandlers() {
     type RequestHandler func(http.ResponseWriter, *http.Request)
-    withResponseHeaders := func(h RequestHandler) RequestHandler {
+
+    // decorator for all HTTP handlers
+    decoratedHandler := func(h RequestHandler) RequestHandler {
         return func(w http.ResponseWriter, r *http.Request) {
+            const oauthSessionsPurgeFraction float64 = 0.1
+            if rand.Float64() <= oauthSessionsPurgeFraction {
+                oauthSessions.Purge()
+            }
             w.Header().Set("Server", fmt.Sprintf("%s v%s", serverName, version))
             h(w, r)
         }
     }
 
-	http.HandleFunc("/oauth/start", withResponseHeaders(handleOAuthStart))
-	http.HandleFunc("/oauth/callback", withResponseHeaders(handleOAuthCallback))
-	http.HandleFunc("/oauth/poll", withResponseHeaders(handleOAuthPoll))
+	http.HandleFunc("/oauth/start", decoratedHandler(handleOAuthStart))
+	http.HandleFunc("/oauth/callback", decoratedHandler(handleOAuthCallback))
+	http.HandleFunc("/oauth/poll", decoratedHandler(handleOAuthPoll))
 }
 
 func setupSignalHandlers() {
@@ -149,13 +155,7 @@ func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// save the session info and return ID + URL for the user
-	oauthSessions.Put(sid, &OAuthSession{
-		Id:           sid,
-		StartedAt:    time.Now(),
-		Consumer:     consumer,
-		RequestToken: requestToken,
-		Channel:      make(chan bool, 1), // for completion signal when doing long poll
-	})
+	oauthSessions.Put(sid, makeOAuthSession(sid, consumer, requestToken))
 	fmt.Fprintf(w, "%s %s", sid, url)
 }
 
@@ -172,21 +172,18 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	code := r.FormValue("oauth_verifier")
 	if len(code) == 0 {
-		session.Error = fmt.Errorf("oauth_verifier not found in callback request")
+		session.SetErrorf("oauth_verifier not found in callback request")
 		http.Error(w, "no oauth_verifier found", http.StatusForbidden)
 		return
 	}
 
 	accessToken, err := session.Consumer.AuthorizeToken(session.RequestToken, code)
 	if err != nil {
-		session.Error = fmt.Errorf("cannot obtain access token: %v", err)
+		session.SetErrorf("cannot obtain access token: %v", err)
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
 		return
 	}
-
-	session.AccessToken = accessToken
-	session.Error = nil
-	session.Channel <- true
+    session.SetAccessToken(accessToken)
 }
 
 func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
@@ -309,11 +306,43 @@ type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
 type OAuthSession struct {
 	Id           string
 	StartedAt    time.Time
+    UpdatedAt    time.Time
 	Consumer     *oauth.Consumer
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
 	Error        error
 	Channel      chan bool
+}
+
+func makeOAuthSession(sid string, consumer *oauth.Consumer, requestToken *oauth.RequestToken) *OAuthSession {
+    now := time.Now()
+    return &OAuthSession{
+        Id:           sid,
+        StartedAt:    now,
+        UpdatedAt:    now,
+        Consumer:     consumer,
+        RequestToken: requestToken,
+        Channel:      make(chan bool, 1), // for completion signal when doing long poll
+    }
+}
+
+func (s OAuthSession) SetAccessToken(accessToken *oauth.AccessToken) {
+    s.AccessToken = accessToken
+    s.Error = nil
+    s.UpdatedAt = time.Now()
+    s.Channel <- true
+}
+
+func (s OAuthSession) SetError(error error) {
+    if error != nil {
+        s.Error = error
+        s.UpdatedAt = time.Now()
+        s.Channel <- true
+    }
+}
+
+func (s OAuthSession) SetErrorf(f string, args ...interface{}) {
+    s.SetError(fmt.Errorf(f, args...))
 }
 
 type OAuthSessions struct {
@@ -347,6 +376,31 @@ func (s OAuthSessions) Add(k string, v *OAuthSession) bool {
 	}
 	s.m[k] = v
 	return true
+}
+
+func (s OAuthSessions) Remove(k string) {
+    s.Lock()
+    defer s.Unlock()
+    delete(s.m, k)
+}
+
+func (s OAuthSessions) Purge() {
+    const maxAge = 3600 // seconds
+
+    s.Lock()
+    defer s.Unlock()
+
+    stale := []string{}
+    now := time.Now()
+    for k, v := range s.m {
+        if now.UTC().Unix() - v.UpdatedAt.UTC().Unix() >= maxAge {
+            stale = append(stale, k)
+        }
+    }
+
+    for _, k := range stale {
+        delete(s.m, k)
+    }
 }
 
 func (s OAuthSessions) AllocateId() string {
