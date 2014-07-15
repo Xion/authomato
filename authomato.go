@@ -18,53 +18,53 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-    "strconv"
-    "strings"
-    "sync"
-    "time"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	oauth "github.com/mrjones/oauth"
 )
 
 const (
-    serverName = "authomato"
-    version = "0.0.3"
+	serverName = "authomato"
+	version = "0.0.3"
 )
 
 var (
-    address       = flag.String("l", "127.0.0.1:8080", "specify network address the server will listen on")
-    providersFile = flag.String("p", "", "JSON file defining OAuth providers")
-    consumersFile = flag.String("c", "", "JSON file defining OAuth consumers")
+	address	   = flag.String("l", "127.0.0.1:8080", "specify network address the server will listen on")
+	providersFile = flag.String("p", "", "JSON file defining OAuth providers")
+	consumersFile = flag.String("c", "", "JSON file defining OAuth consumers")
 )
 
 var (
 	serverUrl string
 
-    oauthConsumers OAuthConsumers
-    oauthSessions  OAuthSessions = makeOAuthSessions()
+	oauthConsumers OAuthConsumers
+	oauthSessions  OAuthSessions = makeOAuthSessions()
 )
 
 func main() {
-    log.Printf("Initializing Authomato v%s...", version)
+	log.Printf("Initializing Authomato v%s...", version)
 	flag.Parse()
 
-    // server's URL determines which address it listens on
-    serverUrl = fmt.Sprintf("http://%s", *address)
-    if flag.NArg() > 0 {
-        serverUrl = flag.Arg(0)
-    }
-    serverUrl = strings.TrimSuffix(serverUrl, "/")
-    log.Printf("HTTP callbacks will be routed to %s/", serverUrl)
+	// server's URL determines which address it listens on
+	serverUrl = fmt.Sprintf("http://%s", *address)
+	if flag.NArg() > 0 {
+		serverUrl = flag.Arg(0)
+	}
+	serverUrl = strings.TrimSuffix(serverUrl, "/")
+	log.Printf("HTTP callbacks will be routed to %s/", serverUrl)
 
-    // use default paths to configuration files if none was provided
-    if len(*providersFile) == 0 {
-        *providersFile = "./oauth_providers.json"
-        log.Printf("No OAuth providers file specified, using default: %s", *providersFile)
-    }
-    if len(*consumersFile) == 0 {
-        *consumersFile = "./oauth_consumers.json"
-        log.Printf("No OAuth consumers file specified, using default: %s", *consumersFile)
-    }
+	// use default paths to configuration files if none was provided
+	if len(*providersFile) == 0 {
+		*providersFile = "./oauth_providers.json"
+		log.Printf("No OAuth providers file specified, using default: %s", *providersFile)
+	}
+	if len(*consumersFile) == 0 {
+		*consumersFile = "./oauth_consumers.json"
+		log.Printf("No OAuth consumers file specified, using default: %s", *consumersFile)
+	}
 
 	// load OAuth providers and consumers
 	providers, err := loadOAuthProviders(*providersFile)
@@ -76,12 +76,12 @@ func main() {
 		log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
 	}
 	oauthConsumers = consumers
-    if len(consumers) > 0 {
-        log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
-            len(providers), len(consumers))
-    } else {
-        log.Fatalf("No OAuth consumers loaded -- quitting...")
-    }
+	if len(consumers) > 0 {
+		log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
+			len(providers), len(consumers))
+	} else {
+		log.Fatalf("No OAuth consumers loaded -- quitting...")
+	}
 
 	startServer(*address)
 }
@@ -102,19 +102,19 @@ func seedRandomGenerator() {
 }
 
 func setupRequestHandlers() {
-    type RequestHandler func(http.ResponseWriter, *http.Request)
+	type RequestHandler func(http.ResponseWriter, *http.Request)
 
-    // decorator for all HTTP handlers
-    decoratedHandler := func(h RequestHandler) RequestHandler {
-        return func(w http.ResponseWriter, r *http.Request) {
-            const oauthSessionsPurgeFraction float64 = 0.1
-            if rand.Float64() <= oauthSessionsPurgeFraction {
-                oauthSessions.Purge()
-            }
-            w.Header().Set("Server", fmt.Sprintf("%s v%s", serverName, version))
-            h(w, r)
-        }
-    }
+	// decorator for all HTTP handlers
+	decoratedHandler := func(h RequestHandler) RequestHandler {
+		return func(w http.ResponseWriter, r *http.Request) {
+			const oauthSessionsPurgeFraction float64 = 0.1
+			if rand.Float64() <= oauthSessionsPurgeFraction {
+				oauthSessions.Purge()
+			}
+			w.Header().Set("Server", fmt.Sprintf("%s v%s", serverName, version))
+			h(w, r)
+		}
+	}
 
 	http.HandleFunc("/oauth/start", decoratedHandler(handleOAuthStart))
 	http.HandleFunc("/oauth/callback", decoratedHandler(handleOAuthCallback))
@@ -183,7 +183,7 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot obtain access token", http.StatusInternalServerError)
 		return
 	}
-    session.SetAccessToken(accessToken)
+	session.SetAccessToken(accessToken)
 }
 
 func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
@@ -198,22 +198,22 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // determine how we are to wait in this particular poll request
-    var waitTime int64
+	// determine how we are to wait in this particular poll request
+	var waitTime int64
 	wait := r.FormValue("wait")
-    if len(wait) == 0 {
-        waitTime = 0
-    } else if wait == "true" {
-        waitTime = int64(^uint64(0) >> 1) // MaxInt64
-    } else {
-        waitTime, err := strconv.Atoi(wait)
-        if err != nil || waitTime < 0 {
-            http.Error(w, "invalid wait value: "+wait, http.StatusBadRequest)
-            return
-        }
-    }
+	if len(wait) == 0 {
+		waitTime = 0
+	} else if wait == "true" {
+		waitTime = int64(^uint64(0) >> 1) // MaxInt64
+	} else {
+		waitTime, err := strconv.Atoi(wait)
+		if err != nil || waitTime < 0 {
+			http.Error(w, "invalid wait value: "+wait, http.StatusBadRequest)
+			return
+		}
+	}
 
-    start := time.Now().Unix()
+	start := time.Now().Unix()
 	for {
 		if session.AccessToken != nil {
 			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
@@ -224,9 +224,9 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-        // if the wait time was exceeded, end the request
-        now := time.Now().Unix()
-        if now - start >= waitTime {
+		// if the wait time was exceeded, end the request
+		now := time.Now().Unix()
+		if now - start >= waitTime {
 			http.Error(w, "", http.StatusContinue)
 			return
 		}
@@ -256,7 +256,7 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 		providers[k] = &oauth.ServiceProvider{
 			RequestTokenUrl:   p["requestTokenUrl"].(string),
 			AuthorizeTokenUrl: p["authorizeUrl"].(string),
-			AccessTokenUrl:    p["accessTokenUrl"].(string),
+			AccessTokenUrl:	p["accessTokenUrl"].(string),
 		}
 	}
 	return providers, nil
@@ -301,48 +301,48 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 // Data structures
 
 type OAuthProviders map[string]*oauth.ServiceProvider // indexed by name
-type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
+type OAuthConsumers map[string]*oauth.Consumer		// indexed by name
 
 type OAuthSession struct {
-	Id           string
-	StartedAt    time.Time
-    UpdatedAt    time.Time
-	Consumer     *oauth.Consumer
+	Id		   string
+	StartedAt	time.Time
+	UpdatedAt	time.Time
+	Consumer	 *oauth.Consumer
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
-	Error        error
-	Channel      chan bool
+	Error		error
+	Channel	  chan bool
 }
 
 func makeOAuthSession(sid string, consumer *oauth.Consumer, requestToken *oauth.RequestToken) *OAuthSession {
-    now := time.Now()
-    return &OAuthSession{
-        Id:           sid,
-        StartedAt:    now,
-        UpdatedAt:    now,
-        Consumer:     consumer,
-        RequestToken: requestToken,
-        Channel:      make(chan bool, 1), // for completion signal when doing long poll
-    }
+	now := time.Now()
+	return &OAuthSession{
+		Id:		   sid,
+		StartedAt:	now,
+		UpdatedAt:	now,
+		Consumer:	 consumer,
+		RequestToken: requestToken,
+		Channel:	  make(chan bool, 1), // for completion signal when doing long poll
+	}
 }
 
 func (s OAuthSession) SetAccessToken(accessToken *oauth.AccessToken) {
-    s.AccessToken = accessToken
-    s.Error = nil
-    s.UpdatedAt = time.Now()
-    s.Channel <- true
+	s.AccessToken = accessToken
+	s.Error = nil
+	s.UpdatedAt = time.Now()
+	s.Channel <- true
 }
 
 func (s OAuthSession) SetError(error error) {
-    if error != nil {
-        s.Error = error
-        s.UpdatedAt = time.Now()
-        s.Channel <- true
-    }
+	if error != nil {
+		s.Error = error
+		s.UpdatedAt = time.Now()
+		s.Channel <- true
+	}
 }
 
 func (s OAuthSession) SetErrorf(f string, args ...interface{}) {
-    s.SetError(fmt.Errorf(f, args...))
+	s.SetError(fmt.Errorf(f, args...))
 }
 
 type OAuthSessions struct {
@@ -379,28 +379,28 @@ func (s OAuthSessions) Add(k string, v *OAuthSession) bool {
 }
 
 func (s OAuthSessions) Remove(k string) {
-    s.Lock()
-    defer s.Unlock()
-    delete(s.m, k)
+	s.Lock()
+	defer s.Unlock()
+	delete(s.m, k)
 }
 
 func (s OAuthSessions) Purge() {
-    const maxAge = 3600 // seconds
+	const maxAge = 3600 // seconds
 
-    s.Lock()
-    defer s.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
-    stale := []string{}
-    now := time.Now()
-    for k, v := range s.m {
-        if now.UTC().Unix() - v.UpdatedAt.UTC().Unix() >= maxAge {
-            stale = append(stale, k)
-        }
-    }
+	stale := []string{}
+	now := time.Now()
+	for k, v := range s.m {
+		if now.UTC().Unix() - v.UpdatedAt.UTC().Unix() >= maxAge {
+			stale = append(stale, k)
+		}
+	}
 
-    for _, k := range stale {
-        delete(s.m, k)
-    }
+	for _, k := range stale {
+		delete(s.m, k)
+	}
 }
 
 func (s OAuthSessions) AllocateId() string {
