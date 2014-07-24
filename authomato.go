@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+    "syscall"
 	"time"
 
 	oauth "github.com/mrjones/oauth"
@@ -66,24 +67,28 @@ func main() {
 		log.Printf("No OAuth consumers file specified, using default: %s", *consumersFile)
 	}
 
-	// load OAuth providers and consumers
-	providers, err := loadOAuthProviders(*providersFile)
-	if err != nil {
-		log.Fatalf("Error while reading OAuth providers from %s: %v", *providersFile, err)
-	}
-	consumers, err := loadOAuthConsumers(*consumersFile, providers)
-	if err != nil {
-		log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
-	}
-	oauthConsumers = consumers
-	if len(consumers) > 0 {
-		log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
-			len(providers), len(consumers))
-	} else {
-		log.Fatalf("No OAuth consumers loaded -- quitting...")
-	}
-
+    loadConfiguration()
 	startServer(*address)
+}
+
+func loadConfiguration() {
+    providers, err := loadOAuthProviders(*providersFile)
+    if err != nil {
+        log.Fatalf("Error while reading OAuth providers from %s: %v", *providersFile, err)
+    }
+
+    consumers, err := loadOAuthConsumers(*consumersFile, providers)
+    if err != nil {
+        log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
+    }
+
+    if len(consumers) > 0 {
+        log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
+            len(providers), len(consumers))
+    } else {
+        log.Fatalf("No OAuth consumers loaded -- quitting...")
+    }
+    oauthConsumers = consumers
 }
 
 // Server startup
@@ -122,14 +127,25 @@ func setupRequestHandlers() {
 }
 
 func setupSignalHandlers() {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt)
+    handleSignal := func (sig os.Signal, h func(os.Signal)) {
+        ch := make(chan os.Signal, 1)
+        signal.Notify(ch, sig)
+        go func() {
+            for {
+                h(<-ch)
+            }
+        }()
+    }
 
-	go func() {
-		sig := <-ch
-		log.Printf("Caught %s signal, terminating...", sig)
-		os.Exit(0)
-	}()
+    handleSignal(os.Interrupt, func(sig os.Signal) {
+        log.Printf("Caught %s signal, terminating...", sig)
+        os.Exit(0)
+    })
+    handleSignal(syscall.SIGUSR1, func(sig os.Signal) {
+        log.Printf("Caught %s, reloading configuration...", sig)
+        oauthSessions.Clear()
+        loadConfiguration()
+    })
 }
 
 // Request handlers
@@ -378,6 +394,19 @@ func (s OAuthSessions) Add(k string, v *OAuthSession) bool {
 	return true
 }
 
+func (s OAuthSessions) AllocateId() string {
+    const length = 24
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    for {
+        sid := randomString(length, chars)
+        if s.Add(sid, nil) {
+            return sid
+        }
+    }
+    return "" // unreachable
+}
+
 func (s OAuthSessions) Remove(k string) {
 	s.Lock()
 	defer s.Unlock()
@@ -403,17 +432,10 @@ func (s OAuthSessions) Purge() {
 	}
 }
 
-func (s OAuthSessions) AllocateId() string {
-	const length = 24
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-	for {
-		sid := randomString(length, chars)
-		if s.Add(sid, nil) {
-			return sid
-		}
-	}
-	return "" // unreachable
+func (s OAuthSessions) Clear() {
+    s.Lock()
+    defer s.Unlock()
+    s.m = make(map[string]*OAuthSession)
 }
 
 // Utility functions

@@ -121,7 +121,6 @@ This is mostly a toy project to try out Go as a language.
 
 * Recognize HTTP Accept: header and provide different types of output, like JSON.
 * Throttle non-blocking polls through HTTP Retry-After: and Refresh: headers in response to /oauth/poll
-* Watch configuration files (OAuth providers & consumers) for changes and reload them on the fly
 
 ### Code quality tasks
 
