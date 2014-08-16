@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-    "syscall"
+	"syscall"
 	"time"
 
 	oauth "github.com/mrjones/oauth"
@@ -29,11 +29,11 @@ import (
 
 const (
 	serverName = "authomato"
-	version = "0.0.3"
+	version    = "0.0.3"
 )
 
 var (
-	address	   = flag.String("l", "127.0.0.1:8080", "specify network address the server will listen on")
+	address       = flag.String("l", "127.0.0.1:8080", "specify network address the server will listen on")
 	providersFile = flag.String("p", "", "JSON file defining OAuth providers")
 	consumersFile = flag.String("c", "", "JSON file defining OAuth consumers")
 )
@@ -67,28 +67,28 @@ func main() {
 		log.Printf("No OAuth consumers file specified, using default: %s", *consumersFile)
 	}
 
-    loadConfiguration()
+	loadConfiguration()
 	startServer(*address)
 }
 
 func loadConfiguration() {
-    providers, err := loadOAuthProviders(*providersFile)
-    if err != nil {
-        log.Fatalf("Error while reading OAuth providers from %s: %v", *providersFile, err)
-    }
+	providers, err := loadOAuthProviders(*providersFile)
+	if err != nil {
+		log.Fatalf("Error while reading OAuth providers from %s: %v", *providersFile, err)
+	}
 
-    consumers, err := loadOAuthConsumers(*consumersFile, providers)
-    if err != nil {
-        log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
-    }
+	consumers, err := loadOAuthConsumers(*consumersFile, providers)
+	if err != nil {
+		log.Fatalf("Error while reading OAuth consumers from %s: %v", *consumersFile, err)
+	}
 
-    if len(consumers) > 0 {
-        log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
-            len(providers), len(consumers))
-    } else {
-        log.Fatalf("No OAuth consumers loaded -- quitting...")
-    }
-    oauthConsumers = consumers
+	if len(consumers) > 0 {
+		log.Printf("Loaded %d OAuth provider(s) and %d OAuth consumer(s)",
+			len(providers), len(consumers))
+	} else {
+		log.Fatalf("No OAuth consumers loaded -- quitting...")
+	}
+	oauthConsumers = consumers
 }
 
 // Server startup
@@ -127,25 +127,25 @@ func setupRequestHandlers() {
 }
 
 func setupSignalHandlers() {
-    handleSignal := func (sig os.Signal, h func(os.Signal)) {
-        ch := make(chan os.Signal, 1)
-        signal.Notify(ch, sig)
-        go func() {
-            for {
-                h(<-ch)
-            }
-        }()
-    }
+	handleSignal := func(sig os.Signal, h func(os.Signal)) {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, sig)
+		go func() {
+			for {
+				h(<-ch)
+			}
+		}()
+	}
 
-    handleSignal(os.Interrupt, func(sig os.Signal) {
-        log.Printf("Caught %s signal, terminating...", sig)
-        os.Exit(0)
-    })
-    handleSignal(syscall.SIGUSR1, func(sig os.Signal) {
-        log.Printf("Caught %s, reloading configuration...", sig)
-        oauthSessions.Clear()
-        loadConfiguration()
-    })
+	handleSignal(os.Interrupt, func(sig os.Signal) {
+		log.Printf("Caught %s signal, terminating...", sig)
+		os.Exit(0)
+	})
+	handleSignal(syscall.SIGUSR1, func(sig os.Signal) {
+		log.Printf("Caught %s, reloading configuration...", sig)
+		oauthSessions.Clear()
+		loadConfiguration()
+	})
 }
 
 // Request handlers
@@ -242,7 +242,7 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 
 		// if the wait time was exceeded, end the request
 		now := time.Now().Unix()
-		if now - start >= waitTime {
+		if now-start >= waitTime {
 			http.Error(w, "", http.StatusContinue)
 			return
 		}
@@ -272,7 +272,7 @@ func loadOAuthProviders(filename string) (OAuthProviders, error) {
 		providers[k] = &oauth.ServiceProvider{
 			RequestTokenUrl:   p["requestTokenUrl"].(string),
 			AuthorizeTokenUrl: p["authorizeUrl"].(string),
-			AccessTokenUrl:	p["accessTokenUrl"].(string),
+			AccessTokenUrl:    p["accessTokenUrl"].(string),
 		}
 	}
 	return providers, nil
@@ -317,28 +317,28 @@ func loadOAuthConsumers(filename string, oauthProviders OAuthProviders) (OAuthCo
 // Data structures
 
 type OAuthProviders map[string]*oauth.ServiceProvider // indexed by name
-type OAuthConsumers map[string]*oauth.Consumer		// indexed by name
+type OAuthConsumers map[string]*oauth.Consumer        // indexed by name
 
 type OAuthSession struct {
-	Id		   string
-	StartedAt	time.Time
-	UpdatedAt	time.Time
-	Consumer	 *oauth.Consumer
+	Id           string
+	StartedAt    time.Time
+	UpdatedAt    time.Time
+	Consumer     *oauth.Consumer
 	RequestToken *oauth.RequestToken
 	AccessToken  *oauth.AccessToken
-	Error		error
-	Channel	  chan bool
+	Error        error
+	Channel      chan bool
 }
 
 func makeOAuthSession(sid string, consumer *oauth.Consumer, requestToken *oauth.RequestToken) *OAuthSession {
 	now := time.Now()
 	return &OAuthSession{
-		Id:		   sid,
-		StartedAt:	now,
-		UpdatedAt:	now,
-		Consumer:	 consumer,
+		Id:           sid,
+		StartedAt:    now,
+		UpdatedAt:    now,
+		Consumer:     consumer,
 		RequestToken: requestToken,
-		Channel:	  make(chan bool, 1), // for completion signal when doing long poll
+		Channel:      make(chan bool, 1), // for completion signal when doing long poll
 	}
 }
 
@@ -395,16 +395,16 @@ func (s OAuthSessions) Add(k string, v *OAuthSession) bool {
 }
 
 func (s OAuthSessions) AllocateId() string {
-    const length = 24
-    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const length = 24
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-    for {
-        sid := randomString(length, chars)
-        if s.Add(sid, nil) {
-            return sid
-        }
-    }
-    return "" // unreachable
+	for {
+		sid := randomString(length, chars)
+		if s.Add(sid, nil) {
+			return sid
+		}
+	}
+	return "" // unreachable
 }
 
 func (s OAuthSessions) Remove(k string) {
@@ -422,7 +422,7 @@ func (s OAuthSessions) Purge() {
 	stale := []string{}
 	now := time.Now()
 	for k, v := range s.m {
-		if now.UTC().Unix() - v.UpdatedAt.UTC().Unix() >= maxAge {
+		if now.UTC().Unix()-v.UpdatedAt.UTC().Unix() >= maxAge {
 			stale = append(stale, k)
 		}
 	}
@@ -433,9 +433,9 @@ func (s OAuthSessions) Purge() {
 }
 
 func (s OAuthSessions) Clear() {
-    s.Lock()
-    defer s.Unlock()
-    s.m = make(map[string]*OAuthSession)
+	s.Lock()
+	defer s.Unlock()
+	s.m = make(map[string]*OAuthSession)
 }
 
 // Utility functions
