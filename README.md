@@ -2,6 +2,8 @@
 
 A simple OAuth proxy for applications that cannot afford a web browser
 
+[![baby-gopher](https://raw2.github.com/drnic/babygopher-site/gh-pages/images/babygopher-badge.png)](http://www.babygopher.org)
+
 ## How does it work?
 
 The typical OAuth flow for authorizing an app to access user's account
