@@ -2,7 +2,7 @@
 
 A simple OAuth proxy for applications that cannot afford a web browser
 
-[![baby-gopher](https://raw2.github.com/drnic/babygopher-site/gh-pages/images/babygopher-badge.png)](http://www.babygopher.org)
+[![baby-gopher](https://raw.github.com/drnic/babygopher-site/gh-pages/images/babygopher-badge.png)](http://www.babygopher.org)
 
 ## How does it work?
 
