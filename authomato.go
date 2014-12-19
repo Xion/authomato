@@ -153,7 +153,7 @@ func setupSignalHandlers() {
 func handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("app")
 	if len(name) == 0 {
-		http.Error(w, "'app' paramater missing", http.StatusBadRequest)
+		http.Error(w, "'app' parameter missing", http.StatusBadRequest)
 		return
 	}
 	consumer, ok := oauthConsumers[name]
@@ -229,7 +229,6 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	start := time.Now().Unix()
 	for {
 		if session.AccessToken != nil {
 			fmt.Fprintf(w, "%s %s", session.AccessToken.Token, session.AccessToken.Secret)
@@ -240,13 +239,14 @@ func handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// if the wait time was exceeded, end the request
-		now := time.Now().Unix()
-		if now-start >= waitTime {
+		// wait for the access token to arrive or for the request to time out
+		select {
+		case <-session.Channel:
+			continue
+		case <-time.After(time.Duration(waitTime) * time.Second):
 			http.Error(w, "", http.StatusContinue)
 			return
 		}
-		<-session.Channel
 	}
 }
 
@@ -422,6 +422,9 @@ func (s OAuthSessions) Purge() {
 	stale := []string{}
 	now := time.Now()
 	for k, v := range s.m {
+		if v == nil {
+			continue // session only had its ID allocated
+		}
 		if now.UTC().Unix()-v.UpdatedAt.UTC().Unix() >= maxAge {
 			stale = append(stale, k)
 		}
